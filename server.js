@@ -1,14 +1,24 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// 🔐 Limit each IP to 5 requests per minute
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5,
+  message: {
+    error: "Too many requests from this IP. Please try again in a minute.",
+  },
+});
+app.use("/analyze", limiter); // Apply to only the /analyze endpoint
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 app.post("/analyze", async (req, res) => {
@@ -34,37 +44,36 @@ ${emailText.slice(0, 8000)}
 `;
 
   try {
-  const response = await axios.post(
-    OPENAI_URL,
-    {
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a cybersecurity assistant trained to detect phishing emails.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.2,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
+    const response = await axios.post(
+      OPENAI_URL,
+      {
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a cybersecurity assistant trained to detect phishing emails.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-    console.log("Raw response from OpenAI:", response.data);
     res.json(response.data);
-    } catch (err) {
+  } catch (err) {
     console.error("AI request failed:", err.response?.data || err.message);
     res.status(500).json({ error: "AI request failed" });
-    }
+  }
 });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () =>
   console.log(`📡 AI Proxy listening on http://localhost:${port}`)
-);// dummy edit
+);
